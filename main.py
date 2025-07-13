@@ -33,15 +33,29 @@ def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_lengt
     sys.stdout.write(f'\r{color_text}{prefix} |{bar}| {percent}% {suffix}{COLOR_RESET}')
     sys.stdout.flush() # Ensure it's printed immediately
 
-def process_files(source_dir, extension, command_prefix, dry_run=False, verbose=False):
+def process_files(source_dir, extension, command_prefix, dry_run=False, verbose=False, output_file_prefix="", output_subdir=""):
+    """
+    Finds files with a specific extension in a source directory,
+    creates new destination paths, and executes a system command.
+
+    Args:
+        source_dir (str): The root directory to search for files.
+        extension (str): The file extension to filter by (e.g., '.txt', 'jpg').
+        command_prefix (list): The beginning of the system command (e.g., ['cp'], ['magick']).
+        dry_run (bool): If True, only prints commands without executing them.
+        verbose (bool): If True, prints STDOUT/STDERR even for successful commands.
+        output_file_prefix (str): Optional prefix to add to the new file name.
+        output_subdir (str): Optional subdirectory to prepend to the relative output path.
+    """
     if not os.path.isdir(source_dir):
         print(f"{COLOR_RED}Error: Source directory '{source_dir}' not found or is not a directory.{COLOR_RESET}")
         sys.exit(1)
 
+    # Ensure the extension starts with a dot
     if not extension.startswith('.'):
         extension = '.' + extension
 
-    output_base_dir = "test"
+    output_base_dir = "test" # This remains hardcoded as "test" as per previous discussion
     os.makedirs(output_base_dir, exist_ok=True)
     print(f"{COLOR_CYAN}Created/Ensured output base directory: {output_base_dir}{COLOR_RESET}")
 
@@ -77,9 +91,15 @@ def process_files(source_dir, extension, command_prefix, dry_run=False, verbose=
                 # Recalculate paths for the current file
                 relative_path = os.path.relpath(original_file_path, source_dir)
                 original_name, original_ext = os.path.splitext(os.path.basename(original_file_path))
-                relative_output_dir = os.path.join(output_base_dir, os.path.dirname(relative_path))
+                
+                # --- MODIFIED LINE 1: Use output_file_prefix from CLI ---
+                new_file_name = f"{output_file_prefix}{original_name}{original_ext}"
+                
+                # --- MODIFIED LINE 2: Incorporate output_subdir ---
+                # os.path.join handles empty strings gracefully, so no extra checks needed
+                relative_output_dir = os.path.join(output_base_dir, output_subdir, os.path.dirname(relative_path))
+                
                 os.makedirs(relative_output_dir, exist_ok=True)
-                new_file_name = f"test_{original_name}{original_ext}"
                 new_file_path = os.path.join(relative_output_dir, new_file_name)
 
                 # Detailed logs for the current file (these print on new lines and will scroll)
@@ -93,14 +113,18 @@ def process_files(source_dir, extension, command_prefix, dry_run=False, verbose=
                 else:
                     try:
                         # Print progress bar BEFORE command execution, as per your request
-                        # This shows progress for the *currently active* file's processing
-                        print_progress(processed_files_counter -1, total_files_to_process, prefix='Progress:', suffix=f'({processed_files_counter}/{total_files_to_process} files)', bar_length=40)
+                        # Note: If `processed_files_counter` reflects the file *just identified*,
+                        # then `processed_files_counter - 1` is correct here for "progress so far".
+                        # However, for total processed files, using `processed_files_counter` (after increment)
+                        # makes more sense for "N out of Total". I've kept your `processed_files_counter - 1`
+                        # here as per your last code snippet to reflect "progress before this command".
+                        print_progress(processed_files_counter - 1, total_files_to_process, prefix='Progress:', suffix=f'({processed_files_counter}/{total_files_to_process} files)', bar_length=40)
                         
                         result = subprocess.run(system_command, check=True, capture_output=True, text=True)
                         
                         # Clear the line where the progress bar was, before printing success/error
                         print("\r" + " " * 200 + "\r", end=" ")
-                        print(f"{COLOR_GREEN}✔ Success.{COLOR_RESET}")
+                        print(f"  {COLOR_GREEN}✔ Success.{COLOR_RESET}")
 
                         if verbose:
                             if result.stdout:
@@ -170,6 +194,19 @@ if __name__ == "__main__":
         action="store_true",
         help="Enable verbose output. Shows STDOUT/STDERR of commands even on success."
     )
+    parser.add_argument(
+        "--output-file-prefix",
+        "-ofp",
+        default="", # Default to no prefix
+        help="Optional prefix to add to the new file name (e.g., 'processed_')."
+    )
+    parser.add_argument(
+        "--output-subdir",
+        "-osd",
+        default="", # Default to no extra subdir
+        help="Optional subdirectory path (e.g., 'results/subfolder') to insert into the output structure.\n"
+             "Example: 'test/YOUR_SUBDIR/original/relative/path/new_file.ext'."
+    )
 
     args = parser.parse_args()
 
@@ -183,6 +220,8 @@ if __name__ == "__main__":
     print(f"  {COLOR_CYAN}Command Prefix:{COLOR_RESET} {args.command_prefix}")
     print(f"  {COLOR_CYAN}Dry Run:{COLOR_RESET} {args.dry_run}")
     print(f"  {COLOR_CYAN}Verbose Mode:{COLOR_RESET} {args.verbose}")
+    print(f"  {COLOR_CYAN}Output File Prefix:{COLOR_RESET} '{args.output_file_prefix}'")
+    print(f"  {COLOR_CYAN}Output Subdirectory:{COLOR_RESET} '{args.output_subdir}'")
     print(f"{COLOR_CYAN}{'-' * 40}{COLOR_RESET}")
 
     process_files(
@@ -190,5 +229,7 @@ if __name__ == "__main__":
         args.file_extension,
         args.command_prefix,
         args.dry_run,
-        args.verbose
+        args.verbose,
+        args.output_file_prefix,
+        args.output_subdir
     )
