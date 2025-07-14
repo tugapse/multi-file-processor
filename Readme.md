@@ -1,5 +1,5 @@
 # File Processor Script
-
+WIP - still under development
 ## Description
 A Python script that processes files with a specified extension in a given directory. For each matching file, it:
 1. Creates a new output path in a dedicated `test` directory
